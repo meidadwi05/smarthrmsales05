@@ -8,7 +8,8 @@ import { randomUUID } from 'node:crypto';
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_ORIGIN, credentials: true }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const roles = ['employee', 'manager', 'director', 'hrd'];
@@ -649,76 +650,600 @@ app.delete('/api/departments/:id', auth, allow('hrd'), requireCompany, validId, 
 
 
 // 4. KARYAWAN
-app.get('/api/employees', (req, res) => {
-  const { search, status } = req.query;
-  let list = [...storeEmployees];
-  if (status && status !== 'Semua') {
-    list = list.filter(e => e.work_status === status);
+
+let cachedEmployeeColumns = null;
+let lastColumnCheck = 0;
+
+async function getEmployeeTableColumns() {
+  const now = Date.now();
+  if (cachedEmployeeColumns && now - lastColumnCheck < 20000) {
+    return cachedEmployeeColumns;
   }
-  if (search && search.trim()) {
-    const q = search.trim().toLowerCase();
-    list = list.filter(e =>
-      (e.name && e.name.toLowerCase().includes(q)) ||
-      (e.employee_code && e.employee_code.toLowerCase().includes(q)) ||
-      (e.division && e.division.toLowerCase().includes(q)) ||
-      (e.position && e.position.toLowerCase().includes(q))
-    );
-  }
-  res.json({ employees: list, total: list.length });
-});
-
-app.post('/api/employees', (req, res) => {
-  const data = req.body || {};
-  if (!data.name || !data.name.trim()) return res.status(400).json({ error: 'Nama karyawan wajib diisi' });
-  const newEmp = {
-    id: String(Date.now()),
-    employee_code: data.employee_code || `K00${storeEmployees.length + 1}`,
-    name: data.name.trim(),
-    photo: data.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-    division: data.division || 'IT',
-    position: data.position || 'Staff',
-    department: data.department || 'IT Support',
-    join_date: data.join_date || new Date().toISOString().slice(0, 10),
-    category: data.category || 'Full Time',
-    contract_start: data.contract_start || new Date().toISOString().slice(0, 10),
-    contract_end: data.contract_end || '2026-12-31',
-    work_status: data.work_status || 'Aktif',
-    account_status: data.account_status || 'Aktif',
-    contract_reminder: data.contract_reminder || 'Kontrak aktif'
-  };
-  storeEmployees.unshift(newEmp);
-  res.status(201).json({ employee: newEmp });
-});
-
-app.put('/api/employees/:id', (req, res) => {
-  const index = storeEmployees.findIndex(e => String(e.id) === String(req.params.id));
-  if (index === -1) return res.status(404).json({ error: 'Karyawan tidak ditemukan' });
-  storeEmployees[index] = { ...storeEmployees[index], ...req.body };
-  res.json({ employee: storeEmployees[index] });
-});
-
-app.delete('/api/employees/:id', (req, res) => {
-  const index = storeEmployees.findIndex(e => String(e.id) === String(req.params.id));
-  if (index === -1) return res.status(404).json({ error: 'Karyawan tidak ditemukan' });
-  const deleted = storeEmployees.splice(index, 1)[0];
-  res.json({ employee: deleted });
-});
-
-app.post('/api/employees/batch-status', (req, res) => {
-  const { ids, status } = req.body || {};
-  if (!Array.isArray(ids) || !ids.length || !status) {
-    return res.status(400).json({ error: 'Data ids dan status wajib diisi' });
-  }
-  const idSet = new Set(ids.map(String));
-  storeEmployees.forEach(e => {
-    if (idSet.has(String(e.id))) {
-      e.work_status = status;
-      if (status === 'Tidak Aktif') e.account_status = 'Tidak Aktif';
+  try {
+    const url = `${process.env.SUPABASE_URL}/rest/v1/?apikey=${process.env.SUPABASE_SERVICE_ROLE_KEY}`;
+    const res = await fetch(url);
+    const openapi = await res.json();
+    const cols = Object.keys(openapi.definitions?.employees?.properties || {});
+    if (cols.length > 0) {
+      cachedEmployeeColumns = new Set(cols);
+      lastColumnCheck = now;
+      return cachedEmployeeColumns;
     }
-  });
-  res.json({ success: true, count: ids.length });
+  } catch (err) {
+    console.warn('Gagal membaca schema kolom employees:', err.message);
+  }
+  return cachedEmployeeColumns;
+}
+
+app.get('/api/employees', async (req, res) => {
+  try {
+    const { search, status } = req.query;
+    let list = [];
+
+    // Coba baca token jika ada untuk filter company_id
+    let companyId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      if (token) {
+        const { data: sessionData } = await supabase.auth.getUser(token);
+        if (sessionData?.user) {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('company_id')
+            .eq('id', sessionData.user.id)
+            .maybeSingle();
+          companyId = prof?.company_id || null;
+        }
+      }
+    }
+
+    if (companyId) {
+      const { data: dbEmployees, error: dbError } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+
+      if (!dbError && dbEmployees && dbEmployees.length > 0) {
+        list = dbEmployees;
+      }
+    }
+
+    if (list.length === 0) {
+      list = [...storeEmployees];
+    }
+
+    if (status && status !== 'Semua') {
+      list = list.filter(e => e.work_status === status);
+    }
+
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(e =>
+        (e.name && e.name.toLowerCase().includes(q)) ||
+        (e.employee_code && e.employee_code.toLowerCase().includes(q)) ||
+        (e.division && e.division.toLowerCase().includes(q)) ||
+        (e.position && e.position.toLowerCase().includes(q))
+      );
+    }
+
+    res.json({ employees: list, total: list.length });
+  } catch (error) {
+    console.error('GET /api/employees error:', error);
+    res.json({ employees: storeEmployees, total: storeEmployees.length });
+  }
 });
 
+app.post(
+  '/api/employees',
+  auth,
+  allow('hrd', 'director'),
+  requireCompany,
+  async (req, res) => {
+    let createdUserId = null;
+
+    try {
+      const data = req.body || {};
+      const companyId = req.profile.company_id;
+
+      const empName = String(
+        data.name || data.nama_karyawan || ''
+      ).trim();
+
+      const email = String(data.email || '')
+        .trim()
+        .toLowerCase();
+
+      const username = String(data.username || '').trim();
+
+      const role = data.role || 'employee';
+
+      const allowedRoles = [
+        'employee',
+        'manager',
+        'director',
+        'hrd',
+        'finance'
+      ];
+
+      if (!empName) {
+        return res.status(400).json({
+          error: 'Nama karyawan wajib diisi'
+        });
+      }
+
+      if (!email) {
+        return res.status(400).json({
+          error: 'Email karyawan wajib diisi'
+        });
+      }
+
+      if (!allowedRoles.includes(role)) {
+        return res.status(400).json({
+          error: 'Role tidak valid'
+        });
+      }
+
+      // Password sementara sesuai pengaturan form
+      const password = String(data.password || '').trim() || '123456';
+
+      if (password.length < 6) {
+        return res.status(400).json({
+          error: 'Password minimal 6 karakter'
+        });
+      }
+
+      const employeeCode = String(
+        data.employee_code || ''
+      ).trim() || makeCode('KRY');
+
+      // Upload file dokumen & kendaraan ke Supabase Storage (bucket: employee-files)
+      const uploadedDocs = {};
+      const incomingFiles = data.files || {};
+
+      for (const [key, fileInfo] of Object.entries(incomingFiles)) {
+        if (!fileInfo || !fileInfo.data) continue;
+
+        try {
+          const rawData = String(fileInfo.data);
+          const matches = rawData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+          let buffer;
+          let mime = fileInfo.type || 'application/octet-stream';
+
+          if (matches && matches.length === 3) {
+            mime = matches[1];
+            buffer = Buffer.from(matches[2], 'base64');
+          } else {
+            buffer = Buffer.from(rawData, 'base64');
+          }
+
+          const originalName = fileInfo.name || `${key}.bin`;
+          const extMatch = originalName.match(/\.([a-zA-Z0-9]+)$/);
+          const ext = extMatch ? extMatch[1] : (mime.split('/')[1] || 'bin');
+          const cleanKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const storagePath = `${companyId}/${employeeCode}/${cleanKey}-${Date.now()}.${ext}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('employee-files')
+            .upload(storagePath, buffer, {
+              contentType: mime,
+              upsert: true
+            });
+
+          if (uploadError) {
+            console.error(`Gagal upload file [${key}] ke storage:`, uploadError);
+          } else {
+            const { data: pubData } = supabase.storage
+              .from('employee-files')
+              .getPublicUrl(storagePath);
+
+            uploadedDocs[key] = pubData?.publicUrl || '';
+            console.log(`Berhasil upload file [${key}]:`, pubData?.publicUrl);
+          }
+        } catch (err) {
+          console.error(`Error memproses file [${key}]:`, err);
+        }
+      }
+
+      // Kumpulkan data detail tambahan dari semua section (pribadi, gaji, kontak, bank, kendaraan)
+      const extraDetails = {
+        // Data Pribadi
+        nama_karyawan: data.nama_karyawan || empName,
+        nomor_telepon: data.nomor_telepon || null,
+        tempat_lahir: data.tempat_lahir || null,
+        tanggal_lahir: data.tanggal_lahir || null,
+        jenis_kelamin: data.jenis_kelamin || null,
+        alamat_ktp: data.alamat_ktp || null,
+        alamat_domisili: data.alamat_domisili || null,
+        pendidikan: data.pendidikan || null,
+        agama: data.agama || null,
+        nama_suami_istri: data.nama_suami_istri || null,
+        nama_anak: data.nama_anak || null,
+        jumlah_anak: data.jumlah_anak || null,
+        nama_bapak: data.nama_bapak || null,
+        nama_ibu: data.nama_ibu || null,
+
+        // Data Kepegawaian Ekstra
+        work_location: data.work_location || null,
+        group: data.group || null,
+        marital_status: data.marital_status || null,
+        reference: data.reference || null,
+        sio_number: data.sio_number || null,
+        has_npwp: data.has_npwp || null,
+
+        // Informasi Gaji
+        salary_basic: data.salary_basic || null,
+        allowance_position: data.allowance_position || null,
+        allowance_project: data.allowance_project || null,
+        allowance_meal: data.allowance_meal || null,
+        allowance_transport: data.allowance_transport || null,
+        allowance_other: data.allowance_other || null,
+
+        // Nomor Dokumen
+        ktp_number: data.ktp_number || null,
+        kk_number: data.kk_number || null,
+        npwp_number: data.npwp_number || null,
+        kpj_number: data.kpj_number || null,
+        jkn_number: data.jkn_number || null,
+
+        // Detail Bank
+        bank_account_name: data.bank_account_name || null,
+        bank_account_number: data.bank_account_number || null,
+        bank_name: data.bank_name || null,
+
+        // Kontak Darurat
+        emergency_name: data.emergency_name || null,
+        emergency_relation: data.emergency_relation || null,
+        emergency_phone: data.emergency_phone || null,
+
+        // Identitas Kendaraan
+        sim_number: data.sim_number || null,
+        stnk_number: data.stnk_number || null
+      };
+
+      // Persiapkan data karyawan dasar
+      const newEmployee = {
+        company_id: companyId,
+        employee_code: employeeCode,
+        name: empName,
+        photo: uploadedDocs.photo_profile || data.photo || null,
+        division: data.division || null,
+        position: data.position || null,
+        department: data.department || null,
+        join_date: data.join_date || null,
+        category: data.category || null,
+        contract_start: data.contract_start || null,
+        contract_end: data.contract_end || null,
+        work_status: data.work_status || 'Aktif',
+        account_status: data.account_status || 'Aktif',
+        contract_reminder: data.contract_reminder || null
+      };
+
+      // Buat akun login Supabase Auth
+      const { data: authData, error: authError } =
+        await supabase.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            full_name: empName,
+            username,
+            must_change_password: true
+          }
+        });
+
+      if (authError) {
+        return res.status(400).json({
+          error: `Gagal membuat akun: ${authError.message}`
+        });
+      }
+
+      createdUserId = authData?.user?.id;
+
+      if (!createdUserId) {
+        throw new Error('ID akun Supabase tidak ditemukan');
+      }
+
+      // Simpan profil akun
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: createdUserId,
+          company_id: companyId,
+          full_name: empName,
+          email,
+          role,
+          department: newEmployee.department,
+          employee_number: employeeCode
+        });
+
+      if (profileError) {
+        throw new Error(
+          `Gagal menyimpan profil: ${profileError.message}`
+        );
+      }
+
+      // Hubungkan data karyawan dengan akun login
+      newEmployee.user_id = createdUserId;
+
+      // Kolom spesifik untuk seluruh section form (dokumen, kendaraan, gaji, bank, kontak, pribadi, kepegawaian)
+      const specificColumns = {
+        // Dokumen Pendukung (File & Nomor)
+        ktp: uploadedDocs.ktp || null,
+        file_ktp: uploadedDocs.ktp || null,
+        ktp_number: data.ktp_number || null,
+
+        kk: uploadedDocs.kk || null,
+        file_kk: uploadedDocs.kk || null,
+        kk_number: data.kk_number || null,
+
+        npwp: uploadedDocs.npwp || null,
+        file_npwp: uploadedDocs.npwp || null,
+        npwp_number: data.npwp_number || null,
+
+        kpj: uploadedDocs.kpj || null,
+        file_kpj: uploadedDocs.kpj || null,
+        kpj_number: data.kpj_number || null,
+
+        jkn: uploadedDocs.jkn || null,
+        file_jkn: uploadedDocs.jkn || null,
+        jkn_number: data.jkn_number || null,
+
+        cv: uploadedDocs.cv || null,
+        file_cv: uploadedDocs.cv || null,
+
+        other: uploadedDocs.other || null,
+        file_other: uploadedDocs.other || null,
+        other_document: uploadedDocs.other || null,
+
+        // Identitas Kendaraan (File & Nomor)
+        sim: uploadedDocs.sim || null,
+        file_sim: uploadedDocs.sim || null,
+        sim_number: data.sim_number || null,
+
+        stnk: uploadedDocs.stnk || null,
+        file_stnk: uploadedDocs.stnk || null,
+        stnk_number: data.stnk_number || null,
+
+        vehicle_front: uploadedDocs.vehicle_front || null,
+        file_vehicle_front: uploadedDocs.vehicle_front || null,
+
+        vehicle_back: uploadedDocs.vehicle_back || null,
+        file_vehicle_back: uploadedDocs.vehicle_back || null,
+
+        vehicle_side: uploadedDocs.vehicle_side || null,
+        file_vehicle_side: uploadedDocs.vehicle_side || null,
+
+        // Informasi Gaji
+        salary_basic: data.salary_basic || null,
+        allowance_position: data.allowance_position || null,
+        allowance_project: data.allowance_project || null,
+        allowance_meal: data.allowance_meal || null,
+        allowance_transport: data.allowance_transport || null,
+        allowance_other: data.allowance_other || null,
+
+        // Detail Akun Bank
+        bank_name: data.bank_name || null,
+        bank_account_number: data.bank_account_number || null,
+        bank_account_name: data.bank_account_name || null,
+        bank_account_holder: data.bank_account_name || null,
+
+        // Kontak Darurat
+        emergency_name: data.emergency_name || null,
+        emergency_relation: data.emergency_relation || null,
+        emergency_phone: data.emergency_phone || null,
+
+        // Data Pribadi Tambahan
+        nomor_telepon: data.nomor_telepon || null,
+        tempat_lahir: data.tempat_lahir || null,
+        tanggal_lahir: data.tanggal_lahir || null,
+        jenis_kelamin: data.jenis_kelamin || null,
+        alamat_ktp: data.alamat_ktp || null,
+        alamat_domisili: data.alamat_domisili || null,
+        pendidikan: data.pendidikan || null,
+        agama: data.agama || null,
+        nama_suami_istri: data.nama_suami_istri || null,
+        nama_anak: data.nama_anak || null,
+        jumlah_anak: data.jumlah_anak || null,
+        nama_bapak: data.nama_bapak || null,
+        nama_ibu: data.nama_ibu || null,
+
+        // Data Kepegawaian Ekstra
+        work_location: data.work_location || null,
+        group: data.group || null,
+        marital_status: data.marital_status || null,
+        reference: data.reference || null,
+        sio_number: data.sio_number || null,
+        has_npwp: data.has_npwp || null,
+
+        // Wadah JSONB
+        documents: uploadedDocs,
+        details: extraDetails
+      };
+
+      const candidateInsert = {
+        ...newEmployee,
+        ...specificColumns
+      };
+
+      // Filter hanya kolom yang benar-benar ada di database Supabase saat ini
+      const tableCols = await getEmployeeTableColumns();
+      let insertPayload = candidateInsert;
+      if (tableCols && tableCols.size > 0) {
+        insertPayload = {};
+        for (const [col, val] of Object.entries(candidateInsert)) {
+          if (tableCols.has(col)) {
+            insertPayload[col] = val;
+          }
+        }
+      }
+
+      let savedEmployee = null;
+      let employeeError = null;
+
+      try {
+        const { data: inserted, error: insertErr } = await supabase
+          .from('employees')
+          .insert(insertPayload)
+          .select()
+          .single();
+
+        if (insertErr) {
+          employeeError = insertErr;
+        } else {
+          savedEmployee = inserted;
+        }
+      } catch (err) {
+        employeeError = err;
+      }
+
+      // Fallback jika terjadi kendala pada kolom tambahan
+      if (employeeError || !savedEmployee) {
+        console.warn('Fallback insert hanya kolom dasar:', employeeError?.message);
+        const { data: fallbackSaved, error: fallbackError } = await supabase
+          .from('employees')
+          .insert(newEmployee)
+          .select()
+          .single();
+
+        if (fallbackError) {
+          throw new Error(`Gagal menyimpan karyawan: ${fallbackError.message}`);
+        }
+        savedEmployee = fallbackSaved;
+      }
+
+      // Lengkapi objek employee dengan dokumen & detail untuk respon dan state in-memory
+      const completeEmployee = {
+        ...savedEmployee,
+        documents: uploadedDocs,
+        details: extraDetails,
+        username,
+        email,
+        role
+      };
+
+      // Perbarui tampilan sementara di server
+      storeEmployees.unshift(completeEmployee);
+
+      return res.status(201).json({
+        success: true,
+        message: 'Karyawan, file lampiran, dan akun login berhasil disimpan',
+        employee: completeEmployee
+      });
+
+    } catch (error) {
+      console.error('POST /api/employees:', error);
+
+      // Batalkan pembuatan akun jika penyimpanan gagal
+      if (createdUserId) {
+        const { error: cleanupError } =
+          await supabase.auth.admin.deleteUser(createdUserId);
+
+        if (cleanupError) {
+          console.error(
+            'Gagal membatalkan akun:',
+            cleanupError.message
+          );
+
+          return res.status(500).json({
+            error: 'Penyimpanan gagal dan akun perlu diperiksa oleh admin'
+          });
+        }
+      }
+
+      return res.status(500).json({
+        error: error.message || 'Gagal membuat karyawan'
+      });
+    }
+  }
+);
+
+app.put('/api/employees/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const patch = req.body || {};
+
+    const index = storeEmployees.findIndex(e => String(e.id) === String(id));
+    if (index !== -1) {
+      storeEmployees[index] = { ...storeEmployees[index], ...patch };
+    }
+
+    try {
+      await supabase.from('employees').update(patch).eq('id', id);
+    } catch {}
+
+    const employee = index !== -1 ? storeEmployees[index] : { id, ...patch };
+    res.json({ employee });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Gagal memperbarui karyawan' });
+  }
+});
+
+app.delete('/api/employees/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const index = storeEmployees.findIndex(e => String(e.id) === String(id));
+    let deleted = null;
+    if (index !== -1) {
+      deleted = storeEmployees.splice(index, 1)[0];
+    }
+
+    try {
+      await supabase.from('employees').delete().eq('id', id);
+    } catch {}
+
+    res.json({ employee: deleted || { id } });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Gagal menghapus karyawan' });
+  }
+});
+
+app.post('/api/employees/batch-status', async (req, res) => {
+  try {
+    const { ids, status } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length || !status) {
+      return res.status(400).json({ error: 'Data ids dan status wajib diisi' });
+    }
+    const idSet = new Set(ids.map(String));
+    storeEmployees.forEach(e => {
+      if (idSet.has(String(e.id))) {
+        e.work_status = status;
+        if (status === 'Tidak Aktif') e.account_status = 'Tidak Aktif';
+      }
+    });
+
+    try {
+      await supabase.from('employees').update({
+        work_status: status,
+        ...(status === 'Tidak Aktif' ? { account_status: 'Tidak Aktif' } : {})
+      }).in('id', ids);
+    } catch {}
+
+    res.json({ success: true, count: ids.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Gagal mengubah status massal' });
+  }
+});
+
+app.post('/api/employees/batch-delete', async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ error: 'Data ids wajib diisi' });
+    }
+    const idSet = new Set(ids.map(String));
+    storeEmployees = storeEmployees.filter(e => !idSet.has(String(e.id)));
+
+    try {
+      await supabase.from('employees').delete().in('id', ids);
+    } catch {}
+
+    res.json({ success: true, count: ids.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Gagal menghapus massal' });
+  }
+});
 
 // ============================================================================
 // MODUL PENGGAJIAN & KEUANGAN KARYAWAN (REST ENDPOINTS)

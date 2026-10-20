@@ -83,27 +83,156 @@ create table if not exists departments (
 );
 
 create table if not exists employees (
+  -- 1. INFORMASI AKUN
   id uuid primary key default gen_random_uuid(),
   company_id uuid references companies(id) on delete cascade,
-  employee_code text not null,
-  name text not null,
+  user_id uuid,
+  username text,
+  email text,
+  role text default 'employee',
+
+  -- 2. DATA PRIBADI
   photo text,
+  name text not null,
+  nomor_telepon text,
+  tempat_lahir text,
+  tanggal_lahir text,
+  jenis_kelamin text,
+  alamat_ktp text,
+  alamat_domisili text,
+  pendidikan text,
+  agama text,
+  nama_suami_istri text,
+  nama_anak text,
+  jumlah_anak text,
+  nama_bapak text,
+  nama_ibu text,
+
+  -- 3. DATA KEPEGAWAIAN
+  employee_code text not null,
   division text,
   position text,
   department text,
+  work_location text,
   join_date text,
-  category text default 'Full Time',
   contract_start text,
   contract_end text,
-  work_status text not null default 'Aktif',
-  account_status text not null default 'Aktif',
+  "group" text,
+  category text default 'Full Time',
+  marital_status text,
+  reference text,
+  sio_number text,
+  account_status text default 'Aktif',
+  work_status text default 'Aktif',
   contract_reminder text,
+  has_npwp text,
+
+  -- 4. INFORMASI GAJI
+  basic_salary numeric default 0,
+  salary_basic text,
+  allowance_position text,
+  allowance_project text,
+  allowance_meal text,
+  allowance_transport text,
+  allowance_other text,
+
+  -- 5. DOKUMEN PENDUKUNG
+  file_ktp text,
+  ktp_number text,
+  file_kk text,
+  kk_number text,
+  file_npwp text,
+  npwp_number text,
+  file_kpj text,
+  kpj_number text,
+  file_jkn text,
+  jkn_number text,
+  file_cv text,
+  file_other text,
+
+  -- 6. DETAIL AKUN BANK
   bank_name text default 'BCA',
   bank_account_number text,
   bank_account_holder text,
-  basic_salary numeric default 0,
-  created_at timestamptz not null default now()
+  bank_account_name text,
+
+  -- 7. KONTAK DARURAT
+  emergency_name text,
+  emergency_relation text,
+  emergency_phone text,
+
+  -- 8. IDENTITAS KENDARAAN
+  file_sim text,
+  sim_number text,
+  file_stnk text,
+  stnk_number text,
+  file_vehicle_front text,
+  file_vehicle_back text,
+  file_vehicle_side text,
+
+  -- 9. WADAH JSON DATA LENGKAP
+  documents jsonb default '{}'::jsonb,
+  details jsonb default '{}'::jsonb,
+
+  -- 10. TIMESTAMPS (PALING AKHIR)
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
+
+-- ============================================================================
+-- SQL LENGKAP UNTUK SUPABASE SQL EDITOR (JALANKAN SEKALI UNTUK SEMUA SECTION)
+-- ============================================================================
+-- ALTER TABLE employees 
+-- -- Dokumen Pendukung & Nomor
+-- ADD COLUMN IF NOT EXISTS file_npwp text,
+-- ADD COLUMN IF NOT EXISTS file_ktp text,
+-- ADD COLUMN IF NOT EXISTS file_kk text,
+-- ADD COLUMN IF NOT EXISTS file_kpj text,
+-- ADD COLUMN IF NOT EXISTS file_jkn text,
+-- ADD COLUMN IF NOT EXISTS file_cv text,
+-- ADD COLUMN IF NOT EXISTS file_other text,
+-- -- Identitas Kendaraan (File)
+-- ADD COLUMN IF NOT EXISTS file_sim text,
+-- ADD COLUMN IF NOT EXISTS file_stnk text,
+-- ADD COLUMN IF NOT EXISTS file_vehicle_front text,
+-- ADD COLUMN IF NOT EXISTS file_vehicle_back text,
+-- ADD COLUMN IF NOT EXISTS file_vehicle_side text,
+-- -- Informasi Gaji
+-- ADD COLUMN IF NOT EXISTS salary_basic text,
+-- ADD COLUMN IF NOT EXISTS allowance_position text,
+-- ADD COLUMN IF NOT EXISTS allowance_project text,
+-- ADD COLUMN IF NOT EXISTS allowance_meal text,
+-- ADD COLUMN IF NOT EXISTS allowance_transport text,
+-- ADD COLUMN IF NOT EXISTS allowance_other text,
+-- -- Detail Akun Bank
+-- ADD COLUMN IF NOT EXISTS bank_name text,
+-- ADD COLUMN IF NOT EXISTS bank_account_number text,
+-- ADD COLUMN IF NOT EXISTS bank_account_name text,
+-- -- Kontak Darurat
+-- ADD COLUMN IF NOT EXISTS emergency_name text,
+-- ADD COLUMN IF NOT EXISTS emergency_relation text,
+-- ADD COLUMN IF NOT EXISTS emergency_phone text,
+-- -- Data Pribadi
+-- ADD COLUMN IF NOT EXISTS nomor_telepon text,
+-- ADD COLUMN IF NOT EXISTS tempat_lahir text,
+-- ADD COLUMN IF NOT EXISTS tanggal_lahir text,
+-- ADD COLUMN IF NOT EXISTS jenis_kelamin text,
+-- ADD COLUMN IF NOT EXISTS alamat_ktp text,
+-- ADD COLUMN IF NOT EXISTS alamat_domisili text,
+-- ADD COLUMN IF NOT EXISTS pendidikan text,
+-- ADD COLUMN IF NOT EXISTS agama text,
+-- ADD COLUMN IF NOT EXISTS nama_suami_istri text,
+-- ADD COLUMN IF NOT EXISTS nama_anak text,
+-- ADD COLUMN IF NOT EXISTS jumlah_anak text,
+-- ADD COLUMN IF NOT EXISTS nama_bapak text,
+-- ADD COLUMN IF NOT EXISTS nama_ibu text,
+-- -- Data Kepegawaian Ekstra
+-- ADD COLUMN IF NOT EXISTS work_location text,
+-- ADD COLUMN IF NOT EXISTS "group" text,
+-- ADD COLUMN IF NOT EXISTS marital_status text,
+-- ADD COLUMN IF NOT EXISTS reference text,
+-- ADD COLUMN IF NOT EXISTS sio_number text,
+-- ADD COLUMN IF NOT EXISTS has_npwp text;
 
 -- ============================================================================
 -- MODUL PENGGAJIAN & KEUANGAN KARYAWAN (PAYROLL & EMPLOYEE FINANCIAL SYSTEM)

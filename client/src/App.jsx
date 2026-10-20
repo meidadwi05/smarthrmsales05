@@ -1,4 +1,5 @@
 import TambahKaryawanPage from "./pages/Karyawan/TambahKaryawanPage.jsx";
+import DetailKaryawanModal from "./pages/Karyawan/DetailKaryawanModal.jsx";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -3002,104 +3003,15 @@ function DataKaryawanPage({ API }) {
 
             {/* Modal Detail Karyawan */}
             {detailModal && (
-                <div className="modal-overlay" onClick={() => setDetailModal(null)}>
-                    <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-                        <div className="panel-head" style={{ borderBottom: "1px solid #f0f3f7", padding: "18px 22px" }}>
-                            <div>
-                                <h2>Detail Karyawan</h2>
-                                <p>Informasi profil dan penempatan kerja</p>
-                            </div>
-                            <button className="icon-button" onClick={() => setDetailModal(null)}>
-                                <X size={17} />
-                            </button>
-                        </div>
-                        <div className="modal-body" style={{ padding: "20px 22px" }}>
-                            <div className="detail-view-card">
-                                <div className="detail-profile-hero">
-                                    <img
-                                        src={
-                                            detailModal.photo ||
-                                            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
-                                        }
-                                        alt={detailModal.name}
-                                        className="detail-avatar-large"
-                                    />
-                                    <div>
-                                        <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", color: "#1e304b" }}>
-                                            {detailModal.name}
-                                        </h3>
-                                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                                            <span style={{ fontWeight: 700, color: "#2465d7", fontSize: "11px" }}>
-                                                {detailModal.employee_code}
-                                            </span>
-                                            <span
-                                                className={`status ${detailModal.work_status === "Aktif" ? "present" : "leave"
-                                                    }`}
-                                            >
-                                                {detailModal.work_status}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="detail-grid">
-                                    <div className="detail-item">
-                                        <span>Divisi</span>
-                                        <b>{detailModal.division || "—"}</b>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span>Jabatan</span>
-                                        <b>{detailModal.position || "—"}</b>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span>Bagian</span>
-                                        <b>{detailModal.department || "—"}</b>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span>Kategori Kerja</span>
-                                        <b>{detailModal.category || "Full Time"}</b>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span>Tanggal Bergabung</span>
-                                        <b>{detailModal.join_date || "—"}</b>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span>Mulai Tanggal</span>
-                                        <b>{detailModal.contract_start || "—"}</b>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span>Selesai Tanggal</span>
-                                        <b>{detailModal.contract_end || "—"}</b>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span>Status Akun</span>
-                                        <b>{detailModal.account_status || "—"}</b>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span>Pengingat</span>
-                                        <b>{detailModal.contract_reminder || "—"}</b>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="modal-action-footer">
-                            <button
-                                type="button"
-                                className="secondary"
-                                onClick={() => {
-                                    setCurrentEmp(detailModal);
-                                    setDetailModal(null);
-                                    setShowModal("edit");
-                                }}
-                            >
-                                <Pencil size={13} /> Edit Data
-                            </button>
-                            <button type="button" className="primary compact" onClick={() => setDetailModal(null)}>
-                                Tutup
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <DetailKaryawanModal
+                    employee={detailModal}
+                    onClose={() => setDetailModal(null)}
+                    onEdit={() => {
+                        setCurrentEmp(detailModal);
+                        setDetailModal(null);
+                        setShowModal("edit");
+                    }}
+                />
             )}
 
             {/* Modal Hapus Single */}

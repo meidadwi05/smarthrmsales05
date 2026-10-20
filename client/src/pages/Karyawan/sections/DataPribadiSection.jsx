@@ -41,7 +41,6 @@ export default function DataPribadiSection({
                 name="photo_profile"
                 files={files}
                 setFiles={setFiles}
-                required
             />
 
 

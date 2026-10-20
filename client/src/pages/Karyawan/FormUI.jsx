@@ -151,12 +151,19 @@ export function Field({
   disabled = false,
   textarea = false,
   rows = 3,
-  helperText = ""
+  helperText = "",
+  value: customValue,
+  onChange: customOnChange,
+  inputMode
 }) {
-  const value = form?.[name] ?? "";
+  const value = customValue !== undefined ? customValue : (form?.[name] ?? "");
 
   const handleChange = (e) => {
-    setForm((previous) => ({
+    if (customOnChange) {
+      customOnChange(e);
+      return;
+    }
+    setForm?.((previous) => ({
       ...previous,
       [name]: e.target.value
     }));
@@ -277,6 +284,7 @@ export function Field({
           id={`employee-${name}`}
           name={name}
           type={type}
+          inputMode={inputMode}
           required={required}
           disabled={disabled}
           placeholder={placeholder}
