@@ -1,0 +1,4 @@
+import React from "react";
+import { CarFront } from "lucide-react";
+import { Section, Field, UploadField } from "../FormUI.jsx";
+export default function KendaraanSection({form,setForm,files,setFiles}) {return <Section title="Identitas Kendaraan" icon={CarFront}><UploadField label="Upload SIM" name="sim" files={files} setFiles={setFiles}/><Field label="Nomor SIM" name="sim_number" form={form} setForm={setForm}/><UploadField label="Upload STNK" name="stnk" files={files} setFiles={setFiles}/><Field label="Nomor STNK" name="stnk_number" form={form} setForm={setForm}/><UploadField label="Upload Gambar Kendaraan Depan" name="vehicle_front" files={files} setFiles={setFiles}/><UploadField label="Upload Gambar Kendaraan Belakang" name="vehicle_back" files={files} setFiles={setFiles}/><UploadField label="Upload Gambar Kendaraan Samping" name="vehicle_side" files={files} setFiles={setFiles}/></Section>}

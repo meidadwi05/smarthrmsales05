@@ -1,0 +1,4 @@
+import React from "react";
+import { UserRound } from "lucide-react";
+import { Section, Field, UploadField } from "../FormUI.jsx";
+export default function AkunSection({form,setForm,files,setFiles}) {return <Section title="Informasi Akun" icon={UserRound}><Field label="Username" name="username" form={form} setForm={setForm} placeholder="Masukkan username"/><Field label="Email" name="email" type="email" form={form} setForm={setForm} placeholder="alamat@email.com"/><Field label="Password" name="password" type="password" form={form} setForm={setForm} disabled placeholder="Disiapkan setelah API akun tersedia"/><Field label="Role" name="role" form={form} setForm={setForm} options={[{value:"employee",label:"Karyawan"},{value:"manager",label:"Atasan / Manager"},{value:"director",label:"Direktur"},{value:"hrd",label:"HRD"},{value:"finance",label:"Finance"}]} required/></Section>}
