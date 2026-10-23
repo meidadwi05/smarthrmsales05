@@ -11,9 +11,7 @@ import {
   Wallet
 } from "lucide-react";
 
-/**
- * Konversi angka ke kalimat terbilang bahasa Indonesia
- */
+
 function terbilang(n) {
   if (!n || isNaN(n) || n <= 0) return "Nol Rupiah";
   const bilangan = [
@@ -534,8 +532,8 @@ export default function DetailKaryawanModal({ employee, onClose, onEdit }) {
                     ? String(employee.jumlah_anak)
                     : employee.details?.jumlah_anak != null &&
                       employee.details?.jumlah_anak !== ""
-                    ? String(employee.details.jumlah_anak)
-                    : "—"
+                      ? String(employee.details.jumlah_anak)
+                      : "—"
                 }
               />
 
@@ -674,15 +672,15 @@ export default function DetailKaryawanModal({ employee, onClose, onEdit }) {
                 label="APAKAH KARYAWAN MEMILIKI NPWP?"
                 value={
                   employee.has_npwp === "ya" ||
-                  employee.has_npwp === true ||
-                  employee.has_npwp === "Ya" ||
-                  employee.details?.has_npwp === "ya"
+                    employee.has_npwp === true ||
+                    employee.has_npwp === "Ya" ||
+                    employee.details?.has_npwp === "ya"
                     ? "Ya"
                     : employee.has_npwp === "tidak" ||
                       employee.has_npwp === false ||
                       employee.details?.has_npwp === "tidak"
-                    ? "Tidak"
-                    : employee.has_npwp || employee.details?.has_npwp || "—"
+                      ? "Tidak"
+                      : employee.has_npwp || employee.details?.has_npwp || "—"
                 }
               />
 
@@ -698,12 +696,12 @@ export default function DetailKaryawanModal({ employee, onClose, onEdit }) {
                       employee.role === "hrd"
                         ? "HRD"
                         : employee.role === "director"
-                        ? "Direktur"
-                        : employee.role === "manager"
-                        ? "Manager"
-                        : employee.role === "finance"
-                        ? "Finance"
-                        : employee.role || "Karyawan"
+                          ? "Direktur"
+                          : employee.role === "manager"
+                            ? "Manager"
+                            : employee.role === "finance"
+                              ? "Finance"
+                              : employee.role || "Karyawan"
                     }
                   />
                 </>

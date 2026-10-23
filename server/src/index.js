@@ -1099,18 +1099,13 @@ app.post(
       }
 
       // Fallback jika terjadi kendala pada kolom tambahan
-      if (employeeError || !savedEmployee) {
-        console.warn('Fallback insert hanya kolom dasar:', employeeError?.message);
-        const { data: fallbackSaved, error: fallbackError } = await supabase
-          .from('employees')
-          .insert(newEmployee)
-          .select()
-          .single();
 
-        if (fallbackError) {
-          throw new Error(`Gagal menyimpan karyawan: ${fallbackError.message}`);
-        }
-        savedEmployee = fallbackSaved;
+      if (employeeError || !savedEmployee) {
+        throw new Error(
+          `Gagal menyimpan seluruh data karyawan: ${employeeError?.message ||
+          "Data karyawan tidak berhasil disimpan"
+          }`
+        );
       }
 
       // Lengkapi objek employee dengan dokumen & detail untuk respon dan state in-memory
@@ -1171,7 +1166,7 @@ app.put('/api/employees/:id', async (req, res) => {
 
     try {
       await supabase.from('employees').update(patch).eq('id', id);
-    } catch {}
+    } catch { }
 
     const employee = index !== -1 ? storeEmployees[index] : { id, ...patch };
     res.json({ employee });
@@ -1191,7 +1186,7 @@ app.delete('/api/employees/:id', async (req, res) => {
 
     try {
       await supabase.from('employees').delete().eq('id', id);
-    } catch {}
+    } catch { }
 
     res.json({ employee: deleted || { id } });
   } catch (error) {
@@ -1218,7 +1213,7 @@ app.post('/api/employees/batch-status', async (req, res) => {
         work_status: status,
         ...(status === 'Tidak Aktif' ? { account_status: 'Tidak Aktif' } : {})
       }).in('id', ids);
-    } catch {}
+    } catch { }
 
     res.json({ success: true, count: ids.length });
   } catch (error) {
@@ -1237,7 +1232,7 @@ app.post('/api/employees/batch-delete', async (req, res) => {
 
     try {
       await supabase.from('employees').delete().in('id', ids);
-    } catch {}
+    } catch { }
 
     res.json({ success: true, count: ids.length });
   } catch (error) {
